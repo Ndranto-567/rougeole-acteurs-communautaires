@@ -1,9 +1,8 @@
 // ═══════════════════════════════════════════════════════
 //  ⚠️  CONFIGURATION — MODIFIEZ CETTE LIGNE UNIQUEMENT
 //  Collez ici l'URL obtenue après le déploiement Apps Script
-//  (Déployer → Nouveau déploiement → Application Web → URL)
 // ═══════════════════════════════════════════════════════
-const GS_URL = 'https://script.google.com/macros/s/AKfycbxy63zxnxBwJX1dYpq46D-mv3UQrAvOsr0WPg4sGC-G6DYdlm1jaLIMn8B3kVr0MQwN4A/exec';
+const GS_URL = 'REMPLACEZ_PAR_VOTRE_URL_APPS_SCRIPT';
 //  Exemple :
 //  const GS_URL = 'https://script.google.com/macros/s/AKfycb.../exec';
 
@@ -40,24 +39,28 @@ const REGIONS_DISTRICTS = {
 //  MAPPING COLONNES EXCEL → champs internes
 // ═══════════════════════════════════════════════════════
 const COL_MAP = {
-  'region':           'region',
-  'district':         'district',
-  'csb':              'csb',
-  'fokontany':        'fokontany',
-  'nomet prenom':     'nom',
-  'nom et prenom':    'nom',
-  'nom etprenom':     'nom',
-  'nom':              'nom',
-  'poste':            'poste',
-  'fonction':         'poste',
-  'cin':              'cin',
-  'nummvola':         'mvola',
-  "numm'vola":        'mvola',
-  'nummobile money':  'mvola',
-  'mobile money':     'mvola',
-  'mvola':            'mvola',
-  'mvola/airtel':     'mvola',
+  'region':          'region',
+  'district':        'district',
+  'csb':             'csb',
+  'fokontany':       'fokontany',
+  'nomet prenom':    'nom',
+  'nom et prenom':   'nom',
+  'nom etprenom':    'nom',
+  'nom':             'nom',
+  'poste':           'poste',
+  'fonction':        'poste',
+  'cin':             'cin',
+  'nummvola':        'mvola',
+  "numm'vola":       'mvola',
+  'nummobile money': 'mvola',
+  'mobile money':    'mvola',
+  'mvola':           'mvola',
+  'mvola/airtel':    'mvola'
 };
+
+// Regex de validation
+const REGEX_CIN   = /^\d{3} \d{3} \d{3} \d{3}$/;  // 12 chiffres : XXX XXX XXX XXX
+const REGEX_TEL   = /^\d{3} \d{2} \d{3} \d{2}$/;  // 10 chiffres : XXX XX XXX XX
 
 // ═══════════════════════════════════════════════════════
 //  ÉTAT
@@ -126,26 +129,23 @@ function onFileSelect(e) {
 function processFile(file) {
   showProgress(true, 'Lecture du fichier…', 20);
   const reader = new FileReader();
-  reader.onload = function(e) {
+  reader.onload = function(ev) {
     try {
       showProgress(true, 'Analyse des colonnes…', 50);
       let importedRows = [];
-
       if (file.name.endsWith('.csv')) {
-        importedRows = parseCSV(e.target.result);
+        importedRows = parseCSV(ev.target.result);
       } else {
-        const wb = XLSX.read(e.target.result, { type: 'binary' });
+        const wb = XLSX.read(ev.target.result, { type: 'binary' });
         let sheetName = wb.SheetNames.find(n => normalizeKey(n).includes('acteurscommunautaire'))
                      || wb.SheetNames[0];
         const ws = wb.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(ws, { defval: '' });
         importedRows = mapExcelRows(jsonData);
       }
-
-      showProgress(true, `Import de ${importedRows.length} ligne(s)…`, 80);
-
+      showProgress(true, 'Import de ' + importedRows.length + ' ligne(s)…', 80);
       if (rows.length > 0) {
-        if (confirm(`Le tableau contient déjà ${rows.length} ligne(s).\nCliquez OK pour AJOUTER, ou Annuler pour REMPLACER.`)) {
+        if (confirm('Le tableau contient déjà ' + rows.length + ' ligne(s).\nCliquez OK pour AJOUTER, ou Annuler pour REMPLACER.')) {
           rows = rows.concat(importedRows);
         } else {
           rows = importedRows;
@@ -153,21 +153,19 @@ function processFile(file) {
       } else {
         rows = importedRows;
       }
-
       showProgress(true, 'Rendu du tableau…', 95);
-      setTimeout(() => {
+      setTimeout(function() {
         renderTable();
         showProgress(false);
-        showToast(`✓ ${importedRows.length} acteur(s) importé(s) depuis "${file.name}"`, 'success');
+        showToast('✓ ' + importedRows.length + ' acteur(s) importé(s) depuis "' + file.name + '"', 'success');
       }, 100);
-
     } catch(err) {
       console.error(err);
       showProgress(false);
       showToast('Erreur lors de la lecture du fichier : ' + err.message, 'error');
     }
   };
-  reader.onerror = () => { showProgress(false); showToast('Impossible de lire le fichier.', 'error'); };
+  reader.onerror = function() { showProgress(false); showToast('Impossible de lire le fichier.', 'error'); };
   if (file.name.endsWith('.csv')) reader.readAsText(file, 'UTF-8');
   else reader.readAsBinaryString(file);
 }
@@ -179,29 +177,29 @@ function normalizeKey(str) {
 }
 
 function mapExcelRows(jsonData) {
-  return jsonData.map(row => {
-    const mapped = { csb:'', fokontany:'', nom:'', poste:'', cin:'', mvola:'' };
-    Object.keys(row).forEach(col => {
-      const key = normalizeKey(col);
-      const field = COL_MAP[key];
+  return jsonData.map(function(row) {
+    var mapped = { csb:'', fokontany:'', nom:'', poste:'', cin:'', mvola:'' };
+    Object.keys(row).forEach(function(col) {
+      var key = normalizeKey(col);
+      var field = COL_MAP[key];
       if (field && field !== 'region' && field !== 'district') {
         mapped[field] = String(row[col] || '').trim();
       }
     });
     mapped._id = ++rowIdCounter;
     return mapped;
-  }).filter(r => r.nom || r.csb || r.fokontany);
+  }).filter(function(r) { return r.nom || r.csb || r.fokontany; });
 }
 
 function parseCSV(text) {
-  const lines = text.split('\n').filter(l => l.trim());
+  var lines = text.split('\n').filter(function(l) { return l.trim(); });
   if (lines.length < 2) return [];
-  const headers = lines[0].split(',').map(h => h.replace(/"/g,'').trim());
-  return lines.slice(1).map(line => {
-    const vals = line.split(',').map(v => v.replace(/"/g,'').trim());
-    const row = {};
-    headers.forEach((h, i) => row[h] = vals[i] || '');
-    const mapped = mapExcelRows([row]);
+  var headers = lines[0].split(',').map(function(h) { return h.replace(/"/g,'').trim(); });
+  return lines.slice(1).map(function(line) {
+    var vals = line.split(',').map(function(v) { return v.replace(/"/g,'').trim(); });
+    var row = {};
+    headers.forEach(function(h, i) { row[h] = vals[i] || ''; });
+    var mapped = mapExcelRows([row]);
     return mapped[0];
   }).filter(Boolean);
 }
@@ -210,49 +208,47 @@ function parseCSV(text) {
 //  COLLER DEPUIS PRESSE-PAPIERS (Ctrl+V)
 // ═══════════════════════════════════════════════════════
 function onPaste(e) {
-  const text = (e.clipboardData || window.clipboardData).getData('text');
+  var text = (e.clipboardData || window.clipboardData).getData('text');
   if (!text) return;
-
-  const lines = text.split('\n').filter(l => l.trim());
+  var lines = text.split('\n').filter(function(l) { return l.trim(); });
   if (!lines.length) return;
 
-  const firstLineLower = normalizeKey(lines[0]);
+  var firstLineLower = normalizeKey(lines[0]);
   if (firstLineLower.includes('nom') || firstLineLower.includes('csb') || firstLineLower.includes('region')) {
-    const headers = lines[0].split('\t').map(h => h.trim());
-    const dataLines = lines.slice(1).map(line => {
-      const vals = line.split('\t');
-      const row = {};
-      headers.forEach((h, i) => row[h] = vals[i] || '');
+    var headers = lines[0].split('\t').map(function(h) { return h.trim(); });
+    var dataLines = lines.slice(1).map(function(line) {
+      var vals = line.split('\t');
+      var row = {};
+      headers.forEach(function(h, i) { row[h] = vals[i] || ''; });
       return row;
     });
-    const mapped = mapExcelRows(dataLines);
+    var mapped = mapExcelRows(dataLines);
     if (mapped.length) {
       rows = rows.concat(mapped);
       renderTable();
-      showToast(`✓ ${mapped.length} ligne(s) collée(s) avec en-têtes`, 'success');
+      showToast('✓ ' + mapped.length + ' ligne(s) collée(s) avec en-têtes', 'success');
       e.preventDefault();
       return;
     }
   }
 
-  // Coller sans en-tête : ordre CSB, Fokontany, Nom, Poste, CIN, M'vola
-  const newRows = lines.map(line => {
-    const cols = line.split('\t');
+  var newRows = lines.map(function(line) {
+    var cols = line.split('\t');
     return {
-      _id: ++rowIdCounter,
+      _id:       ++rowIdCounter,
       csb:       (cols[0] || '').trim(),
       fokontany: (cols[1] || '').trim(),
       nom:       (cols[2] || '').trim(),
       poste:     (cols[3] || '').trim(),
       cin:       (cols[4] || '').trim(),
-      mvola:     (cols[5] || '').trim(),
+      mvola:     (cols[5] || '').trim()
     };
-  }).filter(r => r.nom || r.csb);
+  }).filter(function(r) { return r.nom || r.csb; });
 
   if (newRows.length) {
     rows = rows.concat(newRows);
     renderTable();
-    showToast(`✓ ${newRows.length} ligne(s) collée(s)`, 'success');
+    showToast('✓ ' + newRows.length + ' ligne(s) collée(s)', 'success');
     e.preventDefault();
   }
 }
@@ -262,72 +258,59 @@ function onPaste(e) {
 // ═══════════════════════════════════════════════════════
 function renderTable() {
   if (searchQuery) {
-    const q = searchQuery.toLowerCase();
-    filteredRows = rows.filter(r =>
-      (r.nom||'').toLowerCase().includes(q) ||
-      (r.csb||'').toLowerCase().includes(q) ||
-      (r.fokontany||'').toLowerCase().includes(q) ||
-      (r.poste||'').toLowerCase().includes(q) ||
-      (r.cin||'').toLowerCase().includes(q)
-    );
+    var q = searchQuery.toLowerCase();
+    filteredRows = rows.filter(function(r) {
+      return (r.nom||'').toLowerCase().includes(q) ||
+             (r.csb||'').toLowerCase().includes(q) ||
+             (r.fokontany||'').toLowerCase().includes(q) ||
+             (r.poste||'').toLowerCase().includes(q) ||
+             (r.cin||'').toLowerCase().includes(q);
+    });
   } else {
-    filteredRows = [...rows];
+    filteredRows = rows.slice();
   }
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  var totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   if (currentPage > totalPages) currentPage = totalPages;
 
-  const start = (currentPage - 1) * PAGE_SIZE;
-  const pageRows = filteredRows.slice(start, start + PAGE_SIZE);
-
-  const tbody = document.getElementById('ac-tbody');
+  var start    = (currentPage - 1) * PAGE_SIZE;
+  var pageRows = filteredRows.slice(start, start + PAGE_SIZE);
+  var tbody    = document.getElementById('ac-tbody');
   tbody.innerHTML = '';
 
   if (filteredRows.length === 0) {
-    tbody.innerHTML = `
-      <tr id="ac-empty-row">
-        <td colspan="8" class="ac-empty">
-          <div class="ac-empty-icon">👥</div>
-          <div>${rows.length > 0 ? 'Aucun résultat pour cette recherche.' : 'Aucun acteur. Importez un fichier Excel ou ajoutez des lignes manuellement.'}</div>
-        </td>
-      </tr>`;
+    tbody.innerHTML =
+      '<tr id="ac-empty-row"><td colspan="8" class="ac-empty">' +
+      '<div class="ac-empty-icon">👥</div>' +
+      '<div>' + (rows.length > 0 ? 'Aucun résultat pour cette recherche.' : 'Aucun acteur. Importez un fichier Excel ou ajoutez des lignes manuellement.') + '</div>' +
+      '</td></tr>';
     document.getElementById('stats-bar').style.display = 'none';
     renderPagination(0, 0);
     updateCount();
     return;
   }
 
-  pageRows.forEach((row, pageIdx) => {
-    const globalIdx = rows.indexOf(row);
-    const displayNum = start + pageIdx + 1;
-    const tr = document.createElement('tr');
-    tr.dataset.idx = globalIdx;
-   // Vérifier les formats pour coloration
-const cinOk   = /^\d{3} \d{3} \d{3} \d{3}$/.test((row.cin   || '').trim());
-const mvolaOk = /^\d{3} \d{2} \d{3} \d{2}$/.test((row.mvola || '').trim());
-const cinVide   = !(row.cin   || '').trim();
-const mvolaVide = !(row.mvola || '').trim();
+  pageRows.forEach(function(row, pageIdx) {
+    var globalIdx  = rows.indexOf(row);
+    var displayNum = start + pageIdx + 1;
 
-tr.innerHTML = `
-  <td class="col-num">${displayNum}</td>
-  <td><input type="text" class="f-csb"   value="${esc(row.csb)}"       placeholder="Nom du CSB"      onchange="updateRow(${globalIdx},'csb',this.value)"></td>
-  <td><input type="text" class="f-fkt"   value="${esc(row.fokontany)}" placeholder="Fokontany"       onchange="updateRow(${globalIdx},'fokontany',this.value)"></td>
-  <td><input type="text" class="f-nom"   value="${esc(row.nom)}"       placeholder="Nom et Prénom"   onchange="updateRow(${globalIdx},'nom',this.value)"></td>
-  <td><input type="text" class="f-pos"   value="${esc(row.poste)}"     placeholder="Poste/Fonction"  onchange="updateRow(${globalIdx},'poste',this.value)"></td>
-  <td><input type="text" class="f-cin ${cinVide ? '' : cinOk ? 'field-ok' : 'field-err'}"
-       value="${esc(row.cin)}" placeholder="XXX XXX XXX XXX" maxlength="15"
-       onkeydown="onlyDigits(event)" oninput="formatCIN(this)"
-       inputmode="numeric" autocomplete="off"
-       onchange="updateRow(${globalIdx},'cin',this.value); renderTable();"
-       title="12 chiffres au format XXX XXX XXX XXX"></td>
-  <td><input type="text" class="f-mvola ${mvolaVide ? '' : mvolaOk ? 'field-ok' : 'field-err'}"
-       value="${esc(row.mvola)}" placeholder="03X XX XXX XX" maxlength="13"
-       onkeydown="onlyDigits(event)" oninput="formatMobileMoney(this)"
-       inputmode="numeric" autocomplete="off"
-       onchange="updateRow(${globalIdx},'mvola',this.value); renderTable();"
-       title="10 chiffres au format XXX XX XXX XX"></td>
-  <td class="col-act"><button class="btn-del-row" onclick="deleteRow(${globalIdx})">✕</button></td>
-`;
+    // Validation visuelle CIN et M'vola
+    var cinVal    = (row.cin   || '').trim();
+    var mvolaVal  = (row.mvola || '').trim();
+    var cinClass  = cinVal   === '' ? '' : (REGEX_CIN.test(cinVal)   ? 'field-ok' : 'field-err');
+    var mvolaClass= mvolaVal === '' ? '' : (REGEX_TEL.test(mvolaVal) ? 'field-ok' : 'field-err');
+
+    var tr = document.createElement('tr');
+    tr.dataset.idx = globalIdx;
+    tr.innerHTML =
+      '<td class="col-num">' + displayNum + '</td>' +
+      '<td><input type="text" class="f-csb" value="' + esc(row.csb) + '" placeholder="Nom du CSB" onchange="updateRow(' + globalIdx + ',\'csb\',this.value)"></td>' +
+      '<td><input type="text" class="f-fkt" value="' + esc(row.fokontany) + '" placeholder="Fokontany" onchange="updateRow(' + globalIdx + ',\'fokontany\',this.value)"></td>' +
+      '<td><input type="text" class="f-nom" value="' + esc(row.nom) + '" placeholder="Nom et Prénom" onchange="updateRow(' + globalIdx + ',\'nom\',this.value)"></td>' +
+      '<td><input type="text" class="f-pos" value="' + esc(row.poste) + '" placeholder="Poste/Fonction" onchange="updateRow(' + globalIdx + ',\'poste\',this.value)"></td>' +
+      '<td><input type="text" class="f-cin ' + cinClass + '" value="' + esc(row.cin) + '" placeholder="XXX XXX XXX XXX" maxlength="15" onkeydown="onlyDigits(event)" oninput="formatCIN(this)" inputmode="numeric" autocomplete="off" title="12 chiffres : XXX XXX XXX XXX" onchange="updateRow(' + globalIdx + ',\'cin\',this.value);renderTable();"></td>' +
+      '<td><input type="text" class="f-mvola ' + mvolaClass + '" value="' + esc(row.mvola) + '" placeholder="03X XX XXX XX" maxlength="13" onkeydown="onlyDigits(event)" oninput="formatMobileMoney(this)" inputmode="numeric" autocomplete="off" title="10 chiffres : XXX XX XXX XX" onchange="updateRow(' + globalIdx + ',\'mvola\',this.value);renderTable();"></td>' +
+      '<td class="col-act"><button class="btn-del-row" onclick="deleteRow(' + globalIdx + ')">✕</button></td>';
     tbody.appendChild(tr);
   });
 
@@ -338,7 +321,7 @@ tr.innerHTML = `
 }
 
 function esc(str) {
-  return String(str||'').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(str || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function updateRow(idx, field, value) {
@@ -354,15 +337,15 @@ function addRow() {
   rows.push({ _id: ++rowIdCounter, csb:'', fokontany:'', nom:'', poste:'', cin:'', mvola:'' });
   currentPage = Math.ceil(rows.length / PAGE_SIZE) || 1;
   renderTable();
-  setTimeout(() => {
-    const lastRow = document.querySelector('#ac-tbody tr:last-child input.f-csb');
+  setTimeout(function() {
+    var lastRow = document.querySelector('#ac-tbody tr:last-child input.f-csb');
     if (lastRow) lastRow.focus();
   }, 50);
 }
 
 function clearAll() {
   if (rows.length === 0) return;
-  if (!confirm(`Supprimer les ${rows.length} acteur(s) du tableau ?`)) return;
+  if (!confirm('Supprimer les ' + rows.length + ' acteur(s) du tableau ?')) return;
   rows = [];
   currentPage = 1;
   renderTable();
@@ -373,51 +356,51 @@ function clearAll() {
 // ═══════════════════════════════════════════════════════
 function updateStats() {
   document.getElementById('stat-total').textContent  = filteredRows.length;
-  document.getElementById('stat-cin').textContent    = filteredRows.filter(r => r.cin && r.cin.trim()).length;
-  document.getElementById('stat-mvola').textContent  = filteredRows.filter(r => r.mvola && r.mvola.trim()).length;
+  document.getElementById('stat-cin').textContent    = filteredRows.filter(function(r) { return r.cin  && r.cin.trim();   }).length;
+  document.getElementById('stat-mvola').textContent  = filteredRows.filter(function(r) { return r.mvola && r.mvola.trim(); }).length;
 }
 
 function updateCount() {
-  const n = rows.length;
-  document.getElementById('ac-count').textContent = `(${n} acteur${n>1?'s':''})`;
+  var n = rows.length;
+  document.getElementById('ac-count').textContent = '(' + n + ' acteur' + (n > 1 ? 's' : '') + ')';
 }
 
 function renderPagination(total, totalPages) {
-  const pg   = document.getElementById('pagination');
-  const info = document.getElementById('page-info');
+  var pg   = document.getElementById('pagination');
+  var info = document.getElementById('page-info');
   pg.innerHTML = '';
-  if (totalPages <= 1) { info.textContent = total > 0 ? `${total} acteur(s)` : ''; return; }
+  if (totalPages <= 1) { info.textContent = total > 0 ? total + ' acteur(s)' : ''; return; }
 
-  const start = (currentPage - 1) * PAGE_SIZE + 1;
-  const end   = Math.min(currentPage * PAGE_SIZE, total);
-  info.textContent = `${start}–${end} sur ${total}`;
+  var start = (currentPage - 1) * PAGE_SIZE + 1;
+  var end   = Math.min(currentPage * PAGE_SIZE, total);
+  info.textContent = start + '–' + end + ' sur ' + total;
 
-  const prev = document.createElement('button');
+  var prev = document.createElement('button');
   prev.className = 'page-btn'; prev.textContent = '‹';
   prev.disabled = currentPage === 1;
-  prev.onclick = () => { currentPage--; renderTable(); };
+  prev.onclick = function() { currentPage--; renderTable(); };
   pg.appendChild(prev);
 
-  for (let p = 1; p <= totalPages; p++) {
+  for (var p = 1; p <= totalPages; p++) {
     if (totalPages > 7 && Math.abs(p - currentPage) > 2 && p !== 1 && p !== totalPages) {
       if (p === 2 || p === totalPages - 1) {
-        const s = document.createElement('span');
+        var s = document.createElement('span');
         s.textContent = '…'; s.style.color = 'var(--muted)'; s.style.padding = '0 4px';
         pg.appendChild(s);
       }
       continue;
     }
-    const btn = document.createElement('button');
+    var btn = document.createElement('button');
     btn.className = 'page-btn' + (p === currentPage ? ' active' : '');
     btn.textContent = p;
-    btn.onclick = (pp => () => { currentPage = pp; renderTable(); })(p);
+    btn.onclick = (function(pp) { return function() { currentPage = pp; renderTable(); }; })(p);
     pg.appendChild(btn);
   }
 
-  const next = document.createElement('button');
+  var next = document.createElement('button');
   next.className = 'page-btn'; next.textContent = '›';
   next.disabled = currentPage === totalPages;
-  next.onclick = () => { currentPage++; renderTable(); };
+  next.onclick = function() { currentPage++; renderTable(); };
   pg.appendChild(next);
 }
 
@@ -431,52 +414,47 @@ function onSearch() {
 }
 
 // ═══════════════════════════════════════════════════════
-//  FORMAT NUMERO
+//  VALIDATION FORMAT CIN & TEL
 // ═══════════════════════════════════════════════════════
-function validateFormatChampsActeurs() {
-  const cinRaw   = /^\d{3} \d{3} \d{3} \d{3}$/;   // 12 chiffres : XXX XXX XXX XXX
-  const telRaw   = /^\d{3} \d{2} \d{3} \d{2}$/;    // 10 chiffres : XXX XX XXX XX
+function validateFormatChamps() {
+  var erreurs = [];
+  rows.forEach(function(r, i) {
+    var num  = i + 1;
+    var nom  = r.nom || '(sans nom)';
+    var cin  = (r.cin   || '').trim();
+    var tel  = (r.mvola || '').trim();
 
-  let erreurs = [];
-
-  rows.forEach((r, i) => {
-    const num = i + 1;
-
-    // CIN : obligatoire + format
-    if (!r.cin || !r.cin.trim()) {
-      erreurs.push(`Ligne ${num} (${r.nom || '?'}) : CIN manquant.`);
-    } else if (!cinRaw.test(r.cin.trim())) {
-      erreurs.push(`Ligne ${num} (${r.nom || '?'}) : CIN invalide → doit être XXX XXX XXX XXX (12 chiffres).`);
+    if (!cin) {
+      erreurs.push('Ligne ' + num + ' – ' + nom + ' : CIN manquant.');
+    } else if (!REGEX_CIN.test(cin)) {
+      erreurs.push('Ligne ' + num + ' – ' + nom + ' : CIN invalide "' + cin + '" (format attendu : XXX XXX XXX XXX).');
     }
 
-    // Numéro M'vola : obligatoire + format
-    if (!r.mvola || !r.mvola.trim()) {
-      erreurs.push(`Ligne ${num} (${r.nom || '?'}) : Numéro M'vola manquant.`);
-    } else if (!telRaw.test(r.mvola.trim())) {
-      erreurs.push(`Ligne ${num} (${r.nom || '?'}) : Numéro invalide → doit être XXX XX XXX XX (10 chiffres).`);
+    if (!tel) {
+      erreurs.push('Ligne ' + num + ' – ' + nom + ' : Numéro M\'vola manquant.');
+    } else if (!REGEX_TEL.test(tel)) {
+      erreurs.push('Ligne ' + num + ' – ' + nom + ' : Numéro invalide "' + tel + '" (format attendu : XXX XX XXX XX).');
     }
   });
-
   return erreurs;
 }
 
-//  VALIDATION
 // ═══════════════════════════════════════════════════════
-
-
+//  VALIDATION GÉNÉRALE (région, district, lignes vides)
+// ═══════════════════════════════════════════════════════
 function validate() {
-  let ok = true;
-  const region   = document.getElementById('sel-region').value;
-  const district = document.getElementById('sel-district').value;
+  var ok       = true;
+  var region   = document.getElementById('sel-region').value;
+  var district = document.getElementById('sel-district').value;
   setErr('grp-region',   !region);   if (!region)   ok = false;
   setErr('grp-district', !district); if (!district) ok = false;
   if (rows.length === 0) {
     showToast('Le tableau est vide. Ajoutez au moins un acteur.', 'error');
     ok = false;
   }
-  const missing = rows.filter(r => !r.nom.trim()).length;
+  var missing = rows.filter(function(r) { return !r.nom.trim(); }).length;
   if (missing > 0) {
-    showToast(`${missing} ligne(s) sans nom. Veuillez les compléter ou supprimer.`, 'warn');
+    showToast(missing + ' ligne(s) sans nom. Veuillez les compléter ou supprimer.', 'warn');
     ok = false;
   }
   return ok;
@@ -487,48 +465,42 @@ function validate() {
 // ═══════════════════════════════════════════════════════
 async function submitData() {
   if (!validate()) return;
-async function submitData() {
-  if (!validate()) return;
 
-  // ← AJOUTEZ CES LIGNES ICI
-  const erreursFormat = validateFormatChampsActeurs();
+  // Validation format CIN et M'vola — bloquant
+  var erreursFormat = validateFormatChamps();
   if (erreursFormat.length > 0) {
-    showToast(`⚠️ ${erreursFormat.length} erreur(s) de format. Corrigez avant d'enregistrer.`, 'error');
-    // Afficher le détail dans la console pour debug
-    console.warn('Erreurs format :', erreursFormat);
-    // Afficher une alerte lisible
-    alert('❌ Erreurs de format détectées :\n\n' + erreursFormat.slice(0, 10).join('\n')
-      + (erreursFormat.length > 10 ? `\n\n… et ${erreursFormat.length - 10} autre(s) erreur(s).` : ''));
+    showToast('⚠️ ' + erreursFormat.length + ' erreur(s) de format. Corrigez avant d\'enregistrer.', 'error');
+    var msg = 'Erreurs de format détectées :\n\n' +
+      erreursFormat.slice(0, 10).join('\n') +
+      (erreursFormat.length > 10 ? '\n\n… et ' + (erreursFormat.length - 10) + ' autre(s) erreur(s).' : '');
+    alert(msg);
     return;
   }
-  // ← FIN DE L'AJOUT
 
-  const region   = document.getElementById('sel-region').value;
+  var region   = document.getElementById('sel-region').value;
+  var district = document.getElementById('sel-district').value;
 
+  var acteurs = rows
+    .map(function(r) {
+      return {
+        csb:       r.csb.trim(),
+        fokontany: r.fokontany.trim(),
+        nom:       r.nom.trim(),
+        poste:     r.poste.trim(),
+        cin:       r.cin.trim(),
+        mvola:     r.mvola.trim()
+      };
+    })
+    .filter(function(r) { return r.nom; });
 
-  
-  const region   = document.getElementById('sel-region').value;
-  const district = document.getElementById('sel-district').value;
-
-  const acteurs = rows
-    .map(r => ({
-      csb:       r.csb.trim(),
-      fokontany: r.fokontany.trim(),
-      nom:       r.nom.trim(),
-      poste:     r.poste.trim(),
-      cin:       r.cin.trim(),
-      mvola:     r.mvola.trim(),
-    }))
-    .filter(r => r.nom);
-
-  const payload = { action: 'saveActeursCommunautaires', region, district, acteurs };
+  var payload = { action: 'saveActeursCommunautaires', region: region, district: district, acteurs: acteurs };
 
   showToast('Envoi en cours…', '');
   try {
-    const res    = await fetch(GS_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(payload) });
-    const result = await res.json();
+    var res    = await fetch(GS_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(payload) });
+    var result = await res.json();
     if (result.status === 'ok') {
-      showToast(`✓ ${acteurs.length} acteur(s) enregistré(s) dans Google Sheet !`, 'success');
+      showToast('✓ ' + acteurs.length + ' acteur(s) enregistré(s) dans Google Sheet !', 'success');
     } else {
       showToast(result.message || 'Erreur Apps Script', 'error');
     }
@@ -542,20 +514,22 @@ async function submitData() {
 //  CHARGER DEPUIS GOOGLE SHEET
 // ═══════════════════════════════════════════════════════
 async function loadData() {
-  const region   = document.getElementById('sel-region').value;
-  const district = document.getElementById('sel-district').value;
+  var region   = document.getElementById('sel-region').value;
+  var district = document.getElementById('sel-district').value;
   if (!region || !district) { showToast('Sélectionnez une région et un district.', 'error'); return; }
 
   showToast('Chargement…', '');
   try {
-    const url  = `${GS_URL}?action=getActeursCommunautaires&region=${encodeURIComponent(region)}&district=${encodeURIComponent(district)}`;
-    const res  = await fetch(url);
-    const data = await res.json();
+    var url  = GS_URL + '?action=getActeursCommunautaires&region=' + encodeURIComponent(region) + '&district=' + encodeURIComponent(district);
+    var res  = await fetch(url);
+    var data = await res.json();
     if (data.status === 'ok' && data.acteurs && data.acteurs.length > 0) {
-      rows = data.acteurs.map(a => ({ _id: ++rowIdCounter, csb: a.csb||'', fokontany: a.fokontany||'', nom: a.nom||'', poste: a.poste||'', cin: a.cin||'', mvola: a.mvola||'' }));
+      rows = data.acteurs.map(function(a) {
+        return { _id: ++rowIdCounter, csb: a.csb||'', fokontany: a.fokontany||'', nom: a.nom||'', poste: a.poste||'', cin: a.cin||'', mvola: a.mvola||'' };
+      });
       currentPage = 1;
       renderTable();
-      showToast(`✓ ${rows.length} acteur(s) chargé(s)`, 'success');
+      showToast('✓ ' + rows.length + ' acteur(s) chargé(s)', 'success');
     } else {
       showToast(data.message || 'Aucune donnée trouvée pour ce district.', 'warn');
     }
@@ -570,19 +544,19 @@ async function loadData() {
 // ═══════════════════════════════════════════════════════
 function exportCSV() {
   if (rows.length === 0) { showToast('Aucune donnée à exporter.', 'warn'); return; }
-  const region   = document.getElementById('sel-region').value   || 'REGION';
-  const district = document.getElementById('sel-district').value || 'DISTRICT';
-  const headers  = ['Région','District','CSB','Fokontany','Nom et Prénom','Poste','CIN',"Num Mobile Money"];
-  const lines = [headers.join(',')];
-  rows.forEach(r => {
+  var region   = document.getElementById('sel-region').value   || 'REGION';
+  var district = document.getElementById('sel-district').value || 'DISTRICT';
+  var headers  = ['Région','District','CSB','Fokontany','Nom et Prénom','Poste','CIN',"Num M'vola"];
+  var lines    = [headers.join(',')];
+  rows.forEach(function(r) {
     lines.push([region, district, r.csb, r.fokontany, r.nom, r.poste, r.cin, r.mvola]
-      .map(v => `"${String(v||'').replace(/"/g,'""')}"`)
+      .map(function(v) { return '"' + String(v||'').replace(/"/g,'""') + '"'; })
       .join(','));
   });
-  const blob = new Blob(['\uFEFF' + lines.join('\n')], { type:'text/csv;charset=utf-8;' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `ActeursCommunautaires_${district}_${new Date().toISOString().slice(0,10)}.csv`;
+  var blob = new Blob(['\uFEFF' + lines.join('\n')], { type:'text/csv;charset=utf-8;' });
+  var a    = document.createElement('a');
+  a.href   = URL.createObjectURL(blob);
+  a.download = 'ActeursCommunautaires_' + district + '_' + new Date().toISOString().slice(0,10) + '.csv';
   a.click();
   showToast('✓ Export CSV téléchargé', 'success');
 }
@@ -604,47 +578,47 @@ function resetAll() {
 //  PROGRESSION IMPORT
 // ═══════════════════════════════════════════════════════
 function showProgress(visible, msg, pct) {
-  const el = document.getElementById('upload-progress');
+  var el = document.getElementById('upload-progress');
   if (!visible) { el.classList.remove('visible'); return; }
   el.classList.add('visible');
-  document.getElementById('upload-msg').textContent = msg || '';
-  document.getElementById('progress-bar').style.width = (pct||0) + '%';
+  document.getElementById('upload-msg').textContent  = msg || '';
+  document.getElementById('progress-bar').style.width = (pct || 0) + '%';
 }
 
 // ═══════════════════════════════════════════════════════
 //  UTILITAIRES
 // ═══════════════════════════════════════════════════════
 function setErr(groupId, hasError) {
-  const g = document.getElementById(groupId);
+  var g = document.getElementById(groupId);
   if (g) g.classList.toggle('has-error', hasError);
 }
 
 function showToast(msg, type) {
-  const t = document.getElementById('toast');
+  var t = document.getElementById('toast');
   document.getElementById('toast-msg').textContent = msg;
-  t.className = type ? `show ${type}` : 'show';
+  t.className = type ? 'show ' + type : 'show';
   clearTimeout(t._timer);
-  t._timer = setTimeout(() => { t.className = type || ''; }, 4000);
+  t._timer = setTimeout(function() { t.className = type || ''; }, 4000);
 }
 
 function onlyDigits(event) {
-  if (!/[0-9]/.test(event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight'].includes(event.key)) {
+  if (!/[0-9]/.test(event.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab'].includes(event.key)) {
     event.preventDefault();
   }
 }
 
 function formatCIN(input) {
-  let v = input.value.replace(/\D/g,'').substring(0, 12);
+  var v = input.value.replace(/\D/g, '').substring(0, 12);
   input.value = v.replace(/(\d{0,3})(\d{0,3})(\d{0,3})(\d{0,3})/,
-    (_, a, b, c, d) => [a,b,c,d].filter(Boolean).join(' '));
+    function(_, a, b, c, d) { return [a,b,c,d].filter(Boolean).join(' '); });
 }
 
 function formatMobileMoney(input) {
-  let v = input.value.replace(/\D/g,'').substring(0, 10);
-  let res = '';
-  if (v.length > 0) res += v.substring(0,3);
-  if (v.length > 3) res += ' ' + v.substring(3,5);
-  if (v.length > 5) res += ' ' + v.substring(5,8);
-  if (v.length > 8) res += ' ' + v.substring(8,10);
+  var v   = input.value.replace(/\D/g, '').substring(0, 10);
+  var res = '';
+  if (v.length > 0) res += v.substring(0, 3);
+  if (v.length > 3) res += ' ' + v.substring(3, 5);
+  if (v.length > 5) res += ' ' + v.substring(5, 8);
+  if (v.length > 8) res += ' ' + v.substring(8, 10);
   input.value = res;
 }
