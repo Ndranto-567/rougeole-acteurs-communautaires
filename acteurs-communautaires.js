@@ -506,7 +506,7 @@ function exportCSV() {
   if (rows.length === 0) { showToast('Aucune donnée à exporter.', 'warn'); return; }
   const region   = document.getElementById('sel-region').value   || 'REGION';
   const district = document.getElementById('sel-district').value || 'DISTRICT';
-  const headers  = ['Région','District','CSB','Fokontany','Nom et Prénom','Poste','CIN',"Num M'vola"];
+  const headers  = ['Région','District','CSB','Fokontany','Nom et Prénom','Poste','CIN',"Num Mobile Money"];
   const lines = [headers.join(',')];
   rows.forEach(r => {
     lines.push([region, district, r.csb, r.fokontany, r.nom, r.poste, r.cin, r.mvola]
