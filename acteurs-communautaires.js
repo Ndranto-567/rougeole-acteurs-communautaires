@@ -3,7 +3,6 @@
 //  Collez ici l'URL obtenue après le déploiement Apps Script
 // ═══════════════════════════════════════════════════════
 const GS_URL = 'https://script.google.com/macros/s/AKfycbxy63zxnxBwJX1dYpq46D-mv3UQrAvOsr0WPg4sGC-G6DYdlm1jaLIMn8B3kVr0MQwN4A/exec';
-
 //  Exemple :
 //  const GS_URL = 'https://script.google.com/macros/s/AKfycb.../exec';
 
