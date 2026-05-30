@@ -302,16 +302,32 @@ function renderTable() {
     const displayNum = start + pageIdx + 1;
     const tr = document.createElement('tr');
     tr.dataset.idx = globalIdx;
-    tr.innerHTML = `
-      <td class="col-num">${displayNum}</td>
-      <td><input type="text" class="f-csb"   value="${esc(row.csb)}"       placeholder="Nom du CSB"      onchange="updateRow(${globalIdx},'csb',this.value)"></td>
-      <td><input type="text" class="f-fkt"   value="${esc(row.fokontany)}" placeholder="Fokontany"       onchange="updateRow(${globalIdx},'fokontany',this.value)"></td>
-      <td><input type="text" class="f-nom"   value="${esc(row.nom)}"       placeholder="Nom et Prénom"   onchange="updateRow(${globalIdx},'nom',this.value)"></td>
-      <td><input type="text" class="f-pos"   value="${esc(row.poste)}"     placeholder="Poste/Fonction"  onchange="updateRow(${globalIdx},'poste',this.value)"></td>
-      <td><input type="text" class="f-cin"   value="${esc(row.cin)}"       placeholder="XXX XXX XXX XXX" maxlength="15" onkeydown="onlyDigits(event)" oninput="formatCIN(this)" inputmode="numeric" autocomplete="off" onchange="updateRow(${globalIdx},'cin',this.value)"></td>
-      <td><input type="text" class="f-mvola" value="${esc(row.mvola)}"     placeholder="03X XX XXX XX"   maxlength="13" onkeydown="onlyDigits(event)" oninput="formatMobileMoney(this)" inputmode="numeric" autocomplete="off" onchange="updateRow(${globalIdx},'mvola',this.value)"></td>
-      <td class="col-act"><button class="btn-del-row" onclick="deleteRow(${globalIdx})">✕</button></td>
-    `;
+   // Vérifier les formats pour coloration
+const cinOk   = /^\d{3} \d{3} \d{3} \d{3}$/.test((row.cin   || '').trim());
+const mvolaOk = /^\d{3} \d{2} \d{3} \d{2}$/.test((row.mvola || '').trim());
+const cinVide   = !(row.cin   || '').trim();
+const mvolaVide = !(row.mvola || '').trim();
+
+tr.innerHTML = `
+  <td class="col-num">${displayNum}</td>
+  <td><input type="text" class="f-csb"   value="${esc(row.csb)}"       placeholder="Nom du CSB"      onchange="updateRow(${globalIdx},'csb',this.value)"></td>
+  <td><input type="text" class="f-fkt"   value="${esc(row.fokontany)}" placeholder="Fokontany"       onchange="updateRow(${globalIdx},'fokontany',this.value)"></td>
+  <td><input type="text" class="f-nom"   value="${esc(row.nom)}"       placeholder="Nom et Prénom"   onchange="updateRow(${globalIdx},'nom',this.value)"></td>
+  <td><input type="text" class="f-pos"   value="${esc(row.poste)}"     placeholder="Poste/Fonction"  onchange="updateRow(${globalIdx},'poste',this.value)"></td>
+  <td><input type="text" class="f-cin ${cinVide ? '' : cinOk ? 'field-ok' : 'field-err'}"
+       value="${esc(row.cin)}" placeholder="XXX XXX XXX XXX" maxlength="15"
+       onkeydown="onlyDigits(event)" oninput="formatCIN(this)"
+       inputmode="numeric" autocomplete="off"
+       onchange="updateRow(${globalIdx},'cin',this.value); renderTable();"
+       title="12 chiffres au format XXX XXX XXX XXX"></td>
+  <td><input type="text" class="f-mvola ${mvolaVide ? '' : mvolaOk ? 'field-ok' : 'field-err'}"
+       value="${esc(row.mvola)}" placeholder="03X XX XXX XX" maxlength="13"
+       onkeydown="onlyDigits(event)" oninput="formatMobileMoney(this)"
+       inputmode="numeric" autocomplete="off"
+       onchange="updateRow(${globalIdx},'mvola',this.value); renderTable();"
+       title="10 chiffres au format XXX XX XXX XX"></td>
+  <td class="col-act"><button class="btn-del-row" onclick="deleteRow(${globalIdx})">✕</button></td>
+`;
     tbody.appendChild(tr);
   });
 
@@ -415,8 +431,39 @@ function onSearch() {
 }
 
 // ═══════════════════════════════════════════════════════
+//  FORMAT NUMERO
+// ═══════════════════════════════════════════════════════
+function validateFormatChampsActeurs() {
+  const cinRaw   = /^\d{3} \d{3} \d{3} \d{3}$/;   // 12 chiffres : XXX XXX XXX XXX
+  const telRaw   = /^\d{3} \d{2} \d{3} \d{2}$/;    // 10 chiffres : XXX XX XXX XX
+
+  let erreurs = [];
+
+  rows.forEach((r, i) => {
+    const num = i + 1;
+
+    // CIN : obligatoire + format
+    if (!r.cin || !r.cin.trim()) {
+      erreurs.push(`Ligne ${num} (${r.nom || '?'}) : CIN manquant.`);
+    } else if (!cinRaw.test(r.cin.trim())) {
+      erreurs.push(`Ligne ${num} (${r.nom || '?'}) : CIN invalide → doit être XXX XXX XXX XXX (12 chiffres).`);
+    }
+
+    // Numéro M'vola : obligatoire + format
+    if (!r.mvola || !r.mvola.trim()) {
+      erreurs.push(`Ligne ${num} (${r.nom || '?'}) : Numéro M'vola manquant.`);
+    } else if (!telRaw.test(r.mvola.trim())) {
+      erreurs.push(`Ligne ${num} (${r.nom || '?'}) : Numéro invalide → doit être XXX XX XXX XX (10 chiffres).`);
+    }
+  });
+
+  return erreurs;
+}
+
 //  VALIDATION
 // ═══════════════════════════════════════════════════════
+
+
 function validate() {
   let ok = true;
   const region   = document.getElementById('sel-region').value;
@@ -440,7 +487,26 @@ function validate() {
 // ═══════════════════════════════════════════════════════
 async function submitData() {
   if (!validate()) return;
+async function submitData() {
+  if (!validate()) return;
 
+  // ← AJOUTEZ CES LIGNES ICI
+  const erreursFormat = validateFormatChampsActeurs();
+  if (erreursFormat.length > 0) {
+    showToast(`⚠️ ${erreursFormat.length} erreur(s) de format. Corrigez avant d'enregistrer.`, 'error');
+    // Afficher le détail dans la console pour debug
+    console.warn('Erreurs format :', erreursFormat);
+    // Afficher une alerte lisible
+    alert('❌ Erreurs de format détectées :\n\n' + erreursFormat.slice(0, 10).join('\n')
+      + (erreursFormat.length > 10 ? `\n\n… et ${erreursFormat.length - 10} autre(s) erreur(s).` : ''));
+    return;
+  }
+  // ← FIN DE L'AJOUT
+
+  const region   = document.getElementById('sel-region').value;
+
+
+  
   const region   = document.getElementById('sel-region').value;
   const district = document.getElementById('sel-district').value;
 
