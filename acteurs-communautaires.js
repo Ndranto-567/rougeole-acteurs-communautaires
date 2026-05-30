@@ -2,7 +2,8 @@
 //  ⚠️  CONFIGURATION — MODIFIEZ CETTE LIGNE UNIQUEMENT
 //  Collez ici l'URL obtenue après le déploiement Apps Script
 // ═══════════════════════════════════════════════════════
-const GS_URL = 'REMPLACEZ_PAR_VOTRE_URL_APPS_SCRIPT';
+const GS_URL = 'https://script.google.com/macros/s/AKfycbxy63zxnxBwJX1dYpq46D-mv3UQrAvOsr0WPg4sGC-G6DYdlm1jaLIMn8B3kVr0MQwN4A/exec';
+
 //  Exemple :
 //  const GS_URL = 'https://script.google.com/macros/s/AKfycb.../exec';
 
@@ -75,11 +76,16 @@ let searchQuery = '';
 // ═══════════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════════
-document.addEventListener('DOMContentLoaded', () => {
-  const sel = document.getElementById('sel-region');
-  Object.keys(REGIONS_DISTRICTS).sort().forEach(r => sel.appendChild(new Option(r, r)));
-  document.getElementById('table-wrap').addEventListener('paste', onPaste);
-});
+// Init appelé directement depuis le HTML via onload, ou ici si DOM déjà prêt
+function initPage() {
+  var sel = document.getElementById('sel-region');
+  if (!sel) return;
+  Object.keys(REGIONS_DISTRICTS).sort().forEach(function(r) {
+    sel.appendChild(new Option(r, r));
+  });
+  var tw = document.getElementById('table-wrap');
+  if (tw) tw.addEventListener('paste', onPaste);
+}
 
 // ═══════════════════════════════════════════════════════
 //  LOCALISATION
